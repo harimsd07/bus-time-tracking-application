@@ -1,49 +1,66 @@
 import 'dart:async';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'package:bus_time_track/main.dart';
 
 class TrackingService {
-  // Logic updated: Changed from Timer? to StreamSubscription?
-  // This allows us to "listen" to the GPS instead of "asking" it on a timer.
-  StreamSubscription<Position>? _positionStream;
+  static StreamSubscription<Position>? _positionStreamSubscription;
+  static final _updateController = StreamController<int>.broadcast();
+  static int _totalUpdates = 0;
 
-  Future<void> startLiveTracking(int busId) async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return;
+  // Logic: Check if a specific bus is currently broadcasting
+  static bool isBusTracking(int busId) => _positionStreamSubscription != null;
 
-    // Logic added: Setting up a 5-meter movement filter to save battery
-    const locationSettings = LocationSettings(
-      accuracy: LocationAccuracy.high,
-      distanceFilter: 5, 
-    );
+  // Logic: Get the stream of update counts for the UI
+  static Stream<int> getUpdateStream(int busId) => _updateController.stream;
 
-    // Logic updated: Replaced Timer.periodic with getPositionStream
-    _positionStream = Geolocator.getPositionStream(locationSettings: locationSettings)
-        .listen((Position position) {
-      _sendToLaravel(busId, position.latitude, position.longitude);
-    });
-  }
-
-  Future<void> _sendToLaravel(int id, double lat, double lng) async {
-    final url = Uri.parse('http://192.168.1.38:8000/api/bus/update-location');
-    try {
-      await http.post(url, 
-        body: jsonEncode({
-          'id': id,
-          'latitude': lat,
-          'longitude': lng,
-        }), 
-        headers: {'Content-Type': 'application/json'}
-      );
-    } catch (e) {
-      print("Update failed: $e");
+  static Future<void> toggleTracking(int busId, bool start) async {
+    if (start) {
+      await _startBroadcasting(busId);
+    } else {
+      await _stopBroadcasting();
     }
   }
 
-  // Logic updated: Cancel the stream instead of the timer
-  void stopTracking() {
-    _positionStream?.cancel();
-    _positionStream = null;
+  static Future<void> _startBroadcasting(int busId) async {
+    // Logic: Ensure permissions are granted on the Nothing Phone 2a
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+
+    // Logic: Using a 10-meter filter to balance accuracy and battery
+    _positionStreamSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 10, 
+      ),
+    ).listen((Position position) async {
+      try {
+        // Logic: Push to your Laravel update-location endpoint
+        final response = await http.post(
+          Uri.parse("${AppConfig.baseUrl}/bus/update-location"),
+          body: {
+            'id': busId.toString(),
+            'latitude': position.latitude.toString(),
+            'longitude': position.longitude.toString(),
+          },
+        );
+
+        if (response.statusCode == 200) {
+          _totalUpdates++;
+          _updateController.add(_totalUpdates);
+        }
+      } catch (e) {
+        print("Broadcasting Error: $e");
+      }
+    });
+  }
+
+  static Future<void> _stopBroadcasting() async {
+    await _positionStreamSubscription?.cancel();
+    _positionStreamSubscription = null;
+    _totalUpdates = 0;
+    _updateController.add(0);
   }
 }

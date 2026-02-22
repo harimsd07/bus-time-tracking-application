@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:bus_time_track/main.dart'; // Logic: Import AppConfig for baseUrl
 
 class AddNewBus extends StatefulWidget {
   const AddNewBus({super.key});
@@ -12,13 +13,25 @@ class AddNewBus extends StatefulWidget {
 class _AddNewBusState extends State<AddNewBus> {
   bool isLoading = false;
 
-  // Controllers for the form fields
   final TextEditingController busNameController = TextEditingController();
   final TextEditingController vehicleNumberController = TextEditingController();
   final TextEditingController pickupStopController = TextEditingController();
   final TextEditingController destinationController = TextEditingController();
   final TextEditingController pickupTimeController = TextEditingController();
   final TextEditingController reachTimeController = TextEditingController();
+
+  // Logic: Added TimePicker to ensure consistent formatting for Laravel
+  Future<void> _selectTime(BuildContext context, TextEditingController controller) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (picked != null && mounted) {
+      setState(() {
+        controller.text = picked.format(context);
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +55,6 @@ class _AddNewBusState extends State<AddNewBus> {
             const Text("Enter the details of the bus to enable live tracking."),
             const SizedBox(height: 24),
 
-            // Form Container
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -85,20 +97,30 @@ class _AddNewBusState extends State<AddNewBus> {
                   Row(
                     children: [
                       Expanded(
-                        child: _buildModernField(
-                          controller: pickupTimeController,
-                          label: 'Dep. Time',
-                          hint: '09:00 AM',
-                          icon: Icons.schedule,
+                        child: InkWell(
+                          onTap: () => _selectTime(context, pickupTimeController),
+                          child: IgnorePointer(
+                            child: _buildModernField(
+                              controller: pickupTimeController,
+                              label: 'Dep. Time',
+                              hint: '09:00 AM',
+                              icon: Icons.schedule,
+                            ),
+                          ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: _buildModernField(
-                          controller: reachTimeController,
-                          label: 'Arr. Time',
-                          hint: '10:30 AM',
-                          icon: Icons.timer_rounded,
+                        child: InkWell(
+                          onTap: () => _selectTime(context, reachTimeController),
+                          child: IgnorePointer(
+                            child: _buildModernField(
+                              controller: reachTimeController,
+                              label: 'Arr. Time',
+                              hint: '10:30 AM',
+                              icon: Icons.timer_rounded,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -108,7 +130,6 @@ class _AddNewBusState extends State<AddNewBus> {
             ),
             const SizedBox(height: 32),
 
-            // Submit Button
             SizedBox(
               width: double.infinity,
               height: 55,
@@ -134,7 +155,6 @@ class _AddNewBusState extends State<AddNewBus> {
     );
   }
 
-  // Modern TextField Builder
   Widget _buildModernField({
     required TextEditingController controller,
     required String label,
@@ -162,7 +182,6 @@ class _AddNewBusState extends State<AddNewBus> {
   }
 
   Future<void> saveBusToBackend() async {
-    // Basic Validation logic added
     if (busNameController.text.isEmpty || vehicleNumberController.text.isEmpty) {
       _showSnackbar("Please fill in the bus name and vehicle number", isError: true);
       return;
@@ -170,7 +189,6 @@ class _AddNewBusState extends State<AddNewBus> {
 
     setState(() => isLoading = true);
 
-    // Logic added: Keys mapping to Laravel BusDetail migration
     final body = {
       "busNameOrbusNo": busNameController.text,
       "vehicle_no": vehicleNumberController.text,
@@ -183,23 +201,28 @@ class _AddNewBusState extends State<AddNewBus> {
     };
 
     try {
-      // Logic added: Local development URL for Android Emulator
-      const url = 'http://192.168.1.38/api/addingBusDetail';
+      // Logic: Updated to use live Railway production URL
+      final url = '${AppConfig.baseUrl}/buses';
       
       final response = await http.post(
         Uri.parse(url),
-        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+        headers: {
+          "Content-Type": "application/json", 
+          "Accept": "application/json"
+        },
         body: jsonEncode(body),
-      );
+      ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         _clearForm();
         _showSnackbar("Bus details saved successfully!");
+        if (!mounted) return;
+        Navigator.pop(context); // Logic: Return to dashboard after success
       } else {
-        _showSnackbar("Failed to save. Check server response.", isError: true);
+        _showSnackbar("Failed to save. Error ${response.statusCode}", isError: true);
       }
     } catch (e) {
-      _showSnackbar("Connection error. Is your Laravel server running?", isError: true);
+      _showSnackbar("Check your internet connection.", isError: true);
     } finally {
       setState(() => isLoading = false);
     }

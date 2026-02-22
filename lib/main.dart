@@ -1,18 +1,23 @@
-import 'package:bus_time_track/presentation/screens/add_new_bus.dart';
-import 'package:bus_time_track/presentation/screens/get_bus_time.dart';
-// Logic added: Import your map screen so the navigator knows where to go
-import 'package:bus_time_track/presentation/screens/live_map_screen.dart';
+import 'package:bus_time_track/presentation/screens/auth/landing_screen.dart';
+import 'package:bus_time_track/presentation/screens/home_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:app_links/app_links.dart'; // Logic Added: Required for catching deep links
 
 class AppConfig {
-  static const String baseUrl = "http://192.168.1.38:8000/api";
+  static const String baseUrl =
+      "https://web-production-0391f.up.railway.app/api";
   static const Color primaryColor = Color(0xFF6200EE);
   static const Color accentColor = Color(0xFF03DAC6);
 }
 
-void main() {
+// Logic: Create a Global Navigator Key to handle navigation from inside a stream
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -20,15 +25,78 @@ void main() {
     ),
   );
 
-  runApp(const BusTrackApp());
+  final prefs = await SharedPreferences.getInstance();
+  final String? savedRole = prefs.getString('role');
+  final String? savedName = prefs.getString('userName');
+
+  runApp(BusTrackApp(initialRole: savedRole, initialName: savedName));
 }
 
-class BusTrackApp extends StatelessWidget {
-  const BusTrackApp({super.key});
+class BusTrackApp extends StatefulWidget {
+  final String? initialRole;
+  final String? initialName;
+  const BusTrackApp({super.key, this.initialRole, this.initialName});
+
+  @override
+  State<BusTrackApp> createState() => _BusTrackAppState();
+}
+
+class _BusTrackAppState extends State<BusTrackApp> {
+  late AppLinks _appLinks;
+
+  @override
+  void initState() {
+    super.initState();
+    _initDeepLinks(); // Logic Added: Initialize listener for OAuth redirects
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | Deep Link Logic [Added to handle the bustrack://login-callback URL]
+  |--------------------------------------------------------------------------
+  | This logic listens for the URI sent from your Laravel AuthController. 
+  | It extracts the token, name, and role, saves them to storage, and 
+  | navigates the user to the HomePage automatically.
+  */
+  void _initDeepLinks() {
+    _appLinks = AppLinks();
+
+    _appLinks.uriLinkStream.listen((uri) async {
+      // Logic: Matches the scheme and host we defined in AndroidManifest.xml
+      if (uri.scheme == 'bustrack' && uri.host == 'login-callback') {
+        final prefs = await SharedPreferences.getInstance();
+
+        final String? token = uri.queryParameters['token'];
+        final String? name = uri.queryParameters['name'];
+        final String? role = uri.queryParameters['role'];
+
+        if (token != null) {
+          // Logic: Persistent session storage
+          await prefs.setString('auth_token', token);
+          await prefs.setString('userName', name ?? "User");
+          await prefs.setString('role', role ?? "student");
+
+          // Logic: Automatic navigation after social login
+          navigatorKey.currentState?.pushAndRemoveUntil(
+            MaterialPageRoute(
+              builder:
+                  (context) => HomePage(
+                    userRole: role ?? 'student',
+                    userName: name ?? 'User',
+                  ),
+            ),
+            (route) => false,
+          );
+        }
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey:
+          navigatorKey, // Logic: Link the GlobalKey for deep link navigation
       title: 'Bus Time Track',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
@@ -36,220 +104,13 @@ class BusTrackApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: AppConfig.primaryColor),
         fontFamily: 'Roboto',
       ),
-      home: const HomePage(),
-    );
-  }
-}
-
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
-
-  @override
-  State<HomePage> createState() => _HomePageState();
-}
-
-class _HomePageState extends State<HomePage> {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: const Text(
-          'Bus Tracker',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
-      ),
-      drawer: const Drawer(),
-      body: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [AppConfig.primaryColor.withOpacity(0.1), Colors.white],
-          ),
-        ),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
-                const Text(
-                  "Welcome Back,",
-                  style: TextStyle(fontSize: 16, color: Colors.black54),
-                ),
-                const Text(
-                  "Manage Your Fleet",
-                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 40),
-
-                _buildMenuCard(
-                  title: "Add New Bus",
-                  subtitle: "Register bus details and schedules",
-                  icon: Icons.add_business_rounded,
-                  color: AppConfig.primaryColor,
-                  onTap:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const AddNewBus(),
-                        ),
-                      ),
-                ),
-
-                const SizedBox(height: 20),
-
-                _buildMenuCard(
-                  title: "View Schedules",
-                  subtitle: "Check routes and arrival times",
-                  icon: Icons.schedule_rounded,
-                  color: AppConfig.accentColor,
-                  onTap:
-                      () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const GetBusTime(),
-                        ),
-                      ),
-                ),
-
-                const Spacer(),
-
-                // Logic updated: Wrapped the Container in an InkWell to enable navigation
-                InkWell(
-                  onTap: () {
-                    // Logic added: Navigating to LiveMapScreen with a sample bus object
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder:
-                            (context) => const LiveMapScreen(
-                              busData: {
-                                'id': 1,
-                                'busNameOrbusNo': 'Route 10 - Express',
-                                'vehicle_no': 'TN-45-AQ-1234',
-                                'latitude': 10.7870,
-                                'longitude': 79.1378,
-                              },
-                            ),
-                      ),
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(25),
-                  child: Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: Colors.black87,
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.map_rounded,
-                          color: Colors.white,
-                          size: 40,
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: const [
-                              Text(
-                                "Real-time Tracking",
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              Text(
-                                "Monitor live bus locations",
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildMenuCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: color.withOpacity(0.1),
-              blurRadius: 15,
-              offset: const Offset(0, 8),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(15),
+      home:
+          widget.initialRole == null
+              ? const LandingPage()
+              : HomePage(
+                userRole: widget.initialRole!,
+                userName: widget.initialName ?? "User",
               ),
-              child: Icon(icon, color: color, size: 30),
-            ),
-            const SizedBox(width: 20),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(fontSize: 14, color: Colors.black54),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }
