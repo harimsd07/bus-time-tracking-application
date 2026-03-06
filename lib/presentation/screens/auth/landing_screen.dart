@@ -1,7 +1,8 @@
+import 'package:bus_time_track/core/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:bus_time_track/main.dart';
-import 'package:bus_time_track/presentation/screens/student/get_bus_time.dart';
+import 'package:bus_time_track/presentation/shared/get_bus_time.dart';
 import 'login_screen.dart';
 import 'register_screen.dart';
 
@@ -16,7 +17,6 @@ class _LandingPageState extends State<LandingPage> {
   final TextEditingController fromController = TextEditingController();
   final TextEditingController toController = TextEditingController();
 
-  // Logic: Swaps the values of the two controllers instantly
   void _swapLocations() {
     setState(() {
       String temp = fromController.text;
@@ -42,11 +42,10 @@ class _LandingPageState extends State<LandingPage> {
         ),
         actions: [
           TextButton(
-            onPressed:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const LoginScreen()),
-                ),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const LoginScreen()),
+            ),
             child: const Text(
               "Login",
               style: TextStyle(
@@ -56,13 +55,12 @@ class _LandingPageState extends State<LandingPage> {
             ),
           ),
           TextButton(
-            onPressed:
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const RegisterScreen(),
-                  ),
-                ),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const RegisterScreen(),
+              ),
+            ),
             child: const Text(
               "Register",
               style: TextStyle(color: Colors.black54),
@@ -80,141 +78,141 @@ class _LandingPageState extends State<LandingPage> {
           ),
         ),
         child: SafeArea(
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(24.0),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 15,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      // Logic: Stack used to overlap the swap button on the fields
-                      Stack(
-                        alignment: Alignment.centerRight,
-                        children: [
-                          Column(
-                            children: [
-                              _buildSearchField(
-                                fromController,
-                                "From Station",
-                                Icons.circle_outlined,
-                              ),
-                              const SizedBox(height: 12),
-                              _buildSearchField(
-                                toController,
-                                "To Station",
-                                Icons.location_on_outlined,
-                              ),
-                            ],
-                          ),
-                          // Logic: The "Vice Versa" Button positioned between fields
-                          Positioned(
-                            right: 15,
-                            child: GestureDetector(
-                              onTap: _swapLocations,
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppConfig.primaryColor,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 3,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppConfig.primaryColor.withOpacity(
-                                        0.3,
+          // Logic Added: Replaced Column with SingleChildScrollView to enable scrolling [cite: 2026-02-11]
+          child: SingleChildScrollView(
+            // Logic Added: Added physics for a smoother feel on Nothing Phone 2a
+            physics: const BouncingScrollPhysics(),
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 15,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      children: [
+                        Stack(
+                          alignment: Alignment.centerRight,
+                          children: [
+                            Column(
+                              children: [
+                                _buildSearchField(
+                                  fromController,
+                                  "From Station",
+                                  Icons.circle_outlined,
+                                ),
+                                const SizedBox(height: 12),
+                                _buildSearchField(
+                                  toController,
+                                  "To Station",
+                                  Icons.location_on_outlined,
+                                ),
+                              ],
+                            ),
+                            Positioned(
+                              right: 15,
+                              child: GestureDetector(
+                                onTap: _swapLocations,
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppConfig.primaryColor,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white,
+                                      width: 3,
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppConfig.primaryColor.withOpacity(0.3),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 4),
                                       ),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(
-                                  Icons.swap_vert,
-                                  color: Colors.white,
-                                  size: 20,
+                                    ],
+                                  ),
+                                  child: const Icon(
+                                    Icons.swap_vert,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
                                 ),
                               ),
                             ),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 55,
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => GetBusTime(
+                                    searchFrom: fromController.text.trim(),
+                                    searchTo: toController.text.trim(),
+                                  ),
+                                ),
+                              );
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppConfig.primaryColor,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                            ),
+                            child: const Text(
+                              "FIND BUSES",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24.0),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.access_time,
+                        size: 16,
+                        color: Colors.black45,
                       ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 55,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder:
-                                    (context) => GetBusTime(
-                                      searchFrom: fromController.text.trim(),
-                                      searchTo: toController.text.trim(),
-                                    ),
-                              ),
-                            );
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppConfig.primaryColor,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(15),
-                            ),
-                          ),
-                          child: const Text(
-                            "FIND BUSES",
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+                      const SizedBox(width: 8),
+                      Text(
+                        "Showing buses departing after ${_getCurrentTime()}",
+                        style: const TextStyle(
+                          color: Colors.black45,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
 
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.access_time,
-                      size: 16,
-                      color: Colors.black45,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      "Showing buses departing after ${_getCurrentTime()}",
-                      style: const TextStyle(
-                        color: Colors.black45,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                const SizedBox(height: 20),
 
-              const SizedBox(height: 20),
-
-              Expanded(
-                child: Container(
+                // Logic Changed: Removed Expanded and ListView. Replaced with Column of items [cite: 2026-02-11]
+                // This prevents "Vertical viewport was given unbounded height" errors inside a ScrollView.
+                Container(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -228,24 +226,19 @@ class _LandingPageState extends State<LandingPage> {
                         ),
                       ),
                       const SizedBox(height: 15),
-                      Expanded(
-                        child: ListView(
-                          padding: EdgeInsets.zero,
-                          children: [
-                            _buildHistoryItem(
-                              "Thiruvarur Junction",
-                              "Chennai Central",
-                              "14:45",
-                            ),
-                            _buildHistoryItem("Madurai", "Trichy", "15:30"),
-                          ],
-                        ),
+                      // Logic: Mapping items to a list of widgets instead of a nested ListView [cite: 2026-02-11]
+                      _buildHistoryItem(
+                        "Thiruvarur Junction",
+                        "Chennai Central",
+                        "14:45",
                       ),
+                      _buildHistoryItem("Madurai", "Trichy", "15:30"),
+                      const SizedBox(height: 30), // Bottom padding for comfortable scrolling
                     ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

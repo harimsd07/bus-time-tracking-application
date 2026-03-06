@@ -1,17 +1,23 @@
 import 'dart:convert';
+import 'package:bus_time_track/core/data/services/api_client.dart';
+import 'package:bus_time_track/presentation/screens/driver/driver_panel_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart'; 
-import 'package:bus_time_track/main.dart';
-// Logic Added: Import driver_broadcast to ensure drivers go to the right screen
-import 'package:bus_time_track/presentation/screens/driver/driver_broadcast.dart';
-import '../live_map_screen.dart';
-import '../auth/login_screen.dart'; 
+
+// Core Layer Imports [cite: 2026-02-24]
+import '../../core/config/app_config.dart';
+import '../../core/utils/role_enums.dart';
+
+
+// Screen Imports [cite: 2026-02-24]
+import '../screens/live_map_screen.dart';
+import '../screens/auth/login_screen.dart'; 
 
 class GetBusTime extends StatefulWidget {
   final bool isDriverMode;
   final String? searchFrom;
   final String? searchTo;
+  
 
   const GetBusTime({
     super.key,
@@ -25,7 +31,9 @@ class GetBusTime extends StatefulWidget {
 }
 
 class _GetBusTimeState extends State<GetBusTime> {
-  TextEditingController searchController = TextEditingController();
+  final TextEditingController searchController = TextEditingController();
+  final ApiClient _apiClient = ApiClient(); // Logic: Centralized HTTP client [cite: 2026-02-24]
+  
   List busTime = [];
   List originalBusTime = [];
   bool isLoading = true;
@@ -38,19 +46,51 @@ class _GetBusTimeState extends State<GetBusTime> {
 
   /*
   |--------------------------------------------------------------------------
-  | Navigation Logic
+  | Data Fetching Logic [Handshake & Budget Optimized]
   |--------------------------------------------------------------------------
-  | Updated to handle the new DriverBroadcastScreen we created in the 
-  | driver/ folder.
+  */
+  Future<void> fetchBusTime() async {
+    if (!mounted) return;
+    setState(() => isLoading = true);
+
+    try {
+      // Logic: Dynamically switch endpoints based on search context [cite: 2026-02-24]
+      String endpoint = "/buses";
+      if (widget.searchFrom != null && widget.searchTo != null) {
+        endpoint = "/search-buses?from=${widget.searchFrom}&to=${widget.searchTo}";
+      }
+
+      final response = await _apiClient.get(endpoint);
+
+      if (response.statusCode == 200) {
+        final jsonResponse = jsonDecode(response.body);
+        setState(() {
+          if (jsonResponse is Map && jsonResponse.containsKey('data')) {
+            busTime = jsonResponse['data'] as List;
+          } else {
+            busTime = jsonResponse as List;
+          }
+          originalBusTime = List.from(busTime);
+          isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Fetch Error: $e");
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  /*
+  |--------------------------------------------------------------------------
+  | Navigation Logic [Standardized for Role-Based Trial]
+  |--------------------------------------------------------------------------
   */
   Future<void> _handleBusTap(Map data) async {
     if (widget.isDriverMode) {
-      // Logic Added: Navigates to the broadcast screen for the selected bus
+      // Logic: Drivers go to the broadcasting panel [cite: 2026-02-24]
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => const DriverBroadcastScreen(), 
-        ),
+        MaterialPageRoute(builder: (context) => DriverPanelScreen(busData: data)), 
       );
       return;
     }
@@ -65,62 +105,24 @@ class _GetBusTimeState extends State<GetBusTime> {
         MaterialPageRoute(
           builder: (context) => LiveMapScreen(
             busData: data,
-            userRole: 'student',
+            userRole: UserRole.student, // Logic: Safe Enum usage [cite: 2026-02-24]
           ),
         ),
       );
     } else {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please login to access real-time tracking"),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: AppConfig.primaryColor,
-        ),
-      );
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
-      );
+      _redirectToLogin();
     }
   }
 
-  Future<void> fetchBusTime() async {
-    if (!mounted) return;
-    setState(() => isLoading = true);
-
-    try {
-      // Logic: Dynamically switches between global search and filtered search
-      String url = "${AppConfig.baseUrl}/buses";
-      if (widget.searchFrom != null && widget.searchTo != null) {
-        url = "${AppConfig.baseUrl}/search?from=${widget.searchFrom}&to=${widget.searchTo}";
-      }
-
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-        },
-      ).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final jsonResponse = jsonDecode(response.body);
-        setState(() {
-          // Logic: Adapted to handle your specific Laravel JSON response structure
-          if (jsonResponse is Map && jsonResponse.containsKey('data')) {
-            busTime = jsonResponse['data'] as List;
-          } else {
-            busTime = jsonResponse as List;
-          }
-          originalBusTime = List.from(busTime);
-          isLoading = false;
-        });
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => isLoading = false);
-    }
+  void _redirectToLogin() {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Please login to access real-time tracking"),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppConfig.primaryColor,
+      ),
+    );
+    Navigator.push(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
   }
 
   void filterBusTime(String query) {
@@ -131,8 +133,7 @@ class _GetBusTimeState extends State<GetBusTime> {
         busTime = originalBusTime.where((bus) {
           final name = bus['busNameOrbusNo']?.toString().toLowerCase() ?? '';
           final vehicle = bus['vehicle_no']?.toString().toLowerCase() ?? '';
-          return name.contains(query.toLowerCase()) ||
-              vehicle.contains(query.toLowerCase());
+          return name.contains(query.toLowerCase()) || vehicle.contains(query.toLowerCase());
         }).toList();
       }
     });
@@ -143,10 +144,8 @@ class _GetBusTimeState extends State<GetBusTime> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
-        title: Text(
-          widget.isDriverMode ? 'Select Your Bus' : 'Bus Schedules',
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: Text(widget.isDriverMode ? 'Select Your Bus' : 'Bus Schedules',
+            style: const TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: true,
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -159,20 +158,7 @@ class _GetBusTimeState extends State<GetBusTime> {
                 ? const Center(child: CircularProgressIndicator())
                 : RefreshIndicator(
                     onRefresh: fetchBusTime,
-                    child: busTime.isEmpty
-                        ? _buildEmptyState()
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(20),
-                            itemCount: busTime.length,
-                            itemBuilder: (context, index) {
-                              final data = busTime[index] as Map;
-                              return InkWell(
-                                borderRadius: BorderRadius.circular(24),
-                                onTap: () => _handleBusTap(data),
-                                child: _buildModernBusCard(data),
-                              );
-                            },
-                          ),
+                    child: busTime.isEmpty ? _buildEmptyState() : _buildBusList(),
                   ),
           ),
         ],
@@ -187,13 +173,7 @@ class _GetBusTimeState extends State<GetBusTime> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(15),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: TextField(
           onChanged: filterBusTime,
@@ -209,31 +189,33 @@ class _GetBusTimeState extends State<GetBusTime> {
     );
   }
 
-  Widget _buildModernBusCard(Map data) {
-    final busName = data['busNameOrbusNo'] ?? 'Unknown Bus';
-    final vehicleNo = data['vehicle_no'] ?? 'N/A';
-    final pickup = data['pick_up_stop'] ?? 'N/A';
-    final destination = data['destination'] ?? 'N/A';
-    final pTime = data['pickup_time'] ?? '--:--';
-    final rTime = data['reach_destination_time'] ?? '--:--';
+  Widget _buildBusList() {
+    return ListView.builder(
+      padding: const EdgeInsets.all(20),
+      itemCount: busTime.length,
+      itemBuilder: (context, index) {
+        final data = busTime[index] as Map;
+        return InkWell(
+          borderRadius: BorderRadius.circular(24),
+          onTap: () => _handleBusTap(data),
+          child: _buildModernBusCard(data),
+        );
+      },
+    );
+  }
 
-    // Logic Added: Live detection based on latitude data from Reverb
-    final isLive = data['latitude'] != null && 
-                  data['latitude'] != 0 && 
-                  data['latitude'].toString() != "0.0";
+  Widget _buildModernBusCard(Map data) {
+    // Logic: Live detection based on GPS data presence [cite: 2026-02-24]
+    final bool isLive = data['latitude'] != null && 
+                       data['latitude'] != 0 && 
+                       data['latitude'].toString() != "0.0";
 
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppConfig.primaryColor.withOpacity(0.05),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: AppConfig.primaryColor.withOpacity(0.05), blurRadius: 20, offset: const Offset(0, 10))],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
@@ -250,8 +232,8 @@ class _GetBusTimeState extends State<GetBusTime> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(busName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        Text(vehicleNo, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+                        Text(data['busNameOrbusNo'] ?? 'Unknown', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                        Text(data['vehicle_no'] ?? 'N/A', style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -264,9 +246,9 @@ class _GetBusTimeState extends State<GetBusTime> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildStopInfo(pickup, pTime, CrossAxisAlignment.start),
+                  _buildStopInfo(data['pick_up_stop'] ?? 'N/A', data['pickup_time'] ?? '--:--', CrossAxisAlignment.start),
                   Icon(Icons.arrow_forward, color: Colors.grey.shade300, size: 20),
-                  _buildStopInfo(destination, rTime, CrossAxisAlignment.end),
+                  _buildStopInfo(data['destination'] ?? 'N/A', data['reach_destination_time'] ?? '--:--', CrossAxisAlignment.end),
                 ],
               ),
             ),
@@ -307,7 +289,7 @@ class _GetBusTimeState extends State<GetBusTime> {
         children: [
           Icon(Icons.bus_alert_rounded, size: 80, color: Colors.grey.shade300),
           const SizedBox(height: 16),
-          const Text("No bus schedules found", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+          const Text("No schedules found", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
         ],
       ),
     );

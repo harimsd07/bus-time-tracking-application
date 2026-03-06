@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # bus_time_track
 
 A new Flutter project.
@@ -14,3 +15,7 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+=======
+# bus-time-tracking-application
+not with gps , but can able to know the time for the particular bus
+>>>>>>> fcb5d0d5c504482eadb395d4d097e73b313be3fc

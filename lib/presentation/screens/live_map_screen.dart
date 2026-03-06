@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:bus_time_track/core/utils/role_enums.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -23,7 +24,7 @@ double calculateBearing(LatLng start, LatLng end) {
 
 class LiveMapScreen extends StatefulWidget {
   final Map busData;
-  final String userRole; // Logic: Added role to differentiate UI
+  final UserRole userRole; // Logic: Added role to differentiate UI
 
   const LiveMapScreen({super.key, required this.busData, required this.userRole});
 

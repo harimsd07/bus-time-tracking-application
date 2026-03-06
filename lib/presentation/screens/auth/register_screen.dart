@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:bus_time_track/core/config/app_config.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:bus_time_track/main.dart';
@@ -147,7 +148,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
               // Logic: Role selector with transit icons
               DropdownButtonFormField<String>(
-                value: selectedRole,
+                initialValue: selectedRole,
                 decoration: InputDecoration(
                   labelText: "Sign up as...",
                   prefixIcon: const Icon(

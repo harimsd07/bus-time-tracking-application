@@ -1,22 +1,23 @@
-import 'package:bus_time_track/presentation/screens/auth/landing_screen.dart';
-import 'package:bus_time_track/presentation/screens/home_screen.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:app_links/app_links.dart'; // Logic Added: Required for catching deep links
+import 'package:app_links/app_links.dart';
 
-class AppConfig {
-  static const String baseUrl =
-      "https://web-production-0391f.up.railway.app/api";
-  static const Color primaryColor = Color(0xFF6200EE);
-  static const Color accentColor = Color(0xFF03DAC6);
-}
+// Logic: New imports for centralized core logic [cite: 2026-02-24]
+import 'core/config/app_config.dart';
+import 'core/utils/http_overrides.dart';
+import 'core/utils/role_enums.dart';
+import 'presentation/screens/auth/landing_screen.dart';
+import 'presentation/home_router.dart'; 
 
-// Logic: Create a Global Navigator Key to handle navigation from inside a stream
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Logic Moved: SSL bypass now isolated in core/utils/ [cite: 2026-02-24]
+  HttpOverrides.global = MyHttpOverrides();
 
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -25,6 +26,7 @@ void main() async {
     ),
   );
 
+  // Logic: Initialize storage early to prevent dashboard "jank" [cite: 2026-02-24]
   final prefs = await SharedPreferences.getInstance();
   final String? savedRole = prefs.getString('role');
   final String? savedName = prefs.getString('userName');
@@ -47,43 +49,40 @@ class _BusTrackAppState extends State<BusTrackApp> {
   @override
   void initState() {
     super.initState();
-    _initDeepLinks(); // Logic Added: Initialize listener for OAuth redirects
+    _initDeepLinks();
   }
 
   /*
   |--------------------------------------------------------------------------
-  | Deep Link Logic [Added to handle the bustrack://login-callback URL]
+  | Deep Link Logic [Updated for Enum-based routing]
   |--------------------------------------------------------------------------
-  | This logic listens for the URI sent from your Laravel AuthController. 
-  | It extracts the token, name, and role, saves them to storage, and 
-  | navigates the user to the HomePage automatically.
   */
   void _initDeepLinks() {
     _appLinks = AppLinks();
 
     _appLinks.uriLinkStream.listen((uri) async {
-      // Logic: Matches the scheme and host we defined in AndroidManifest.xml
       if (uri.scheme == 'bustrack' && uri.host == 'login-callback') {
         final prefs = await SharedPreferences.getInstance();
 
         final String? token = uri.queryParameters['token'];
         final String? name = uri.queryParameters['name'];
-        final String? role = uri.queryParameters['role'];
+        final String? roleStr = uri.queryParameters['role'];
 
         if (token != null) {
           // Logic: Persistent session storage
           await prefs.setString('auth_token', token);
           await prefs.setString('userName', name ?? "User");
-          await prefs.setString('role', role ?? "student");
+          await prefs.setString('role', roleStr ?? "student");
 
-          // Logic: Automatic navigation after social login
+          // Logic: Converting string to Enum prevents "Lazy Role" bugs [cite: 2026-02-24]
+          final UserRole role = UserRoleExtension.fromString(roleStr);
+
           navigatorKey.currentState?.pushAndRemoveUntil(
             MaterialPageRoute(
-              builder:
-                  (context) => HomePage(
-                    userRole: role ?? 'student',
-                    userName: name ?? 'User',
-                  ),
+              builder: (context) => HomeRouter(
+                userRole: role,
+                userName: name ?? 'User',
+              ),
             ),
             (route) => false,
           );
@@ -95,22 +94,21 @@ class _BusTrackAppState extends State<BusTrackApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      navigatorKey:
-          navigatorKey, // Logic: Link the GlobalKey for deep link navigation
+      navigatorKey: navigatorKey,
       title: 'Bus Time Track',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
+        // Logic: Using centralized AppConfig for branding [cite: 2026-02-24]
         colorScheme: ColorScheme.fromSeed(seedColor: AppConfig.primaryColor),
         fontFamily: 'Roboto',
       ),
-      home:
-          widget.initialRole == null
-              ? const LandingPage()
-              : HomePage(
-                userRole: widget.initialRole!,
-                userName: widget.initialName ?? "User",
-              ),
+      home: widget.initialRole == null
+          ? const LandingPage()
+          : HomeRouter(
+              userRole: UserRoleExtension.fromString(widget.initialRole),
+              userName: widget.initialName ?? "User",
+            ),
     );
   }
 }

@@ -1,119 +1,159 @@
-import 'dart:async';
+import 'package:bus_time_track/core/data/services/driver_service.dart';
 import 'package:flutter/material.dart';
-import 'package:geolocator/geolocator.dart';
-import 'package:http/http.dart' as http;
-import 'package:bus_time_track/main.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
+
+// New Architecture Imports [cite: 2026-02-24]
+import '../../../core/config/app_config.dart';
 
 class DriverBroadcastScreen extends StatefulWidget {
-  const DriverBroadcastScreen({super.key});
+  final Map
+  busData; // Logic: Expects bus details from the selection list [cite: 2026-02-24]
+
+  const DriverBroadcastScreen({super.key, required this.busData});
 
   @override
   State<DriverBroadcastScreen> createState() => _DriverBroadcastScreenState();
 }
 
 class _DriverBroadcastScreenState extends State<DriverBroadcastScreen> {
-  bool isBroadcasting = false;
-  Timer? _timer;
-  String _status = "Ready to start";
+  // Logic: Access the singleton to prevent duplicate GPS timers [cite: 2026-02-24]
+  final DriverService _driverService = DriverService();
+  int _updatesSent = 0;
+  StreamSubscription? _updateSubscription;
 
-  // Logic: Handles the start/stop toggle for location sharing
+  @override
+  void initState() {
+    super.initState();
+    // Logic: Sync with existing service state if a trip is already running [cite: 2026-02-24]
+    _updatesSent = _driverService.updateCount;
+
+    // Logic: Listen to the central service for real-time broadcast counts [cite: 2026-02-24]
+    _updateSubscription = _driverService.updateStream.listen((count) {
+      if (mounted) {
+        setState(() {
+          _updatesSent = count;
+        });
+      }
+    });
+  }
+
   Future<void> _toggleBroadcast() async {
-    if (isBroadcasting) {
-      _timer?.cancel();
-      setState(() {
-        isBroadcasting = false;
-        _status = "Broadcast Stopped";
-      });
-    } else {
-      await _startLocationService();
-    }
-  }
-
-  Future<void> _startLocationService() async {
-    // Logic: Standard permission check for Nothing Phone 2a
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-
-    if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
-      setState(() {
-        isBroadcasting = true;
-        _status = "Broadcasting Live...";
-      });
-
-      // Logic: Update backend every 10 seconds
-      _timer = Timer.periodic(const Duration(seconds: 10), (timer) async {
-        Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-        );
-        _sendLocationToBackend(position.latitude, position.longitude);
-      });
-    }
-  }
-
-  Future<void> _sendLocationToBackend(double lat, double lng) async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
-
     try {
-      // Logic: Matches your new backend endpoint and validation rules
-      await http.post(
-        Uri.parse("${AppConfig.baseUrl}/bus/update-location"),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Accept': 'application/json',
-        },
-        body: {
-          'id': '1', // Logic: This should ideally be the bus assigned to the driver
-          'latitude': lat.toString(),
-          'longitude': lng.toString(),
-        },
-      );
+      if (_driverService.isRunning) {
+        // Logic: Gracefully stop the background GPS service [cite: 2026-02-24]
+        _driverService.stopTrip();
+      } else {
+        // Logic: Start trip using the specific ID passed from the list [cite: 2026-02-24]
+        final int busId = int.parse(widget.busData['id'].toString());
+        await _driverService.startTrip(busId);
+      }
+
+      // Logic: Refresh UI to show the new button state [cite: 2026-02-24]
+      if (mounted) setState(() {});
     } catch (e) {
-      debugPrint("API Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Broadcast Error: $e"),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     }
   }
 
   @override
   void dispose() {
-    _timer?.cancel(); // Logic: Always cancel timers to prevent memory leaks
+    // Logic: Cancel UI listener, but DriverService keeps running [cite: 2026-02-24]
+    _updateSubscription?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final bool isLive = _driverService.isRunning;
+
     return Scaffold(
-      appBar: AppBar(title: const Text("Location Broadcast")),
+      appBar: AppBar(
+        title: const Text(
+          "Location Broadcast",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        centerTitle: true,
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Logic: Visual feedback for the driver
-            Icon(
-              Icons.radar_rounded,
-              size: 120,
-              color: isBroadcasting ? Colors.orange : Colors.grey,
+            // Logic: Animated feedback indicating active transmission [cite: 2026-02-24]
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                if (isLive) _buildRadarAnimation(),
+                Icon(
+                  Icons.radar_rounded,
+                  size: 120,
+                  color: isLive ? Colors.orange : Colors.grey,
+                ),
+              ],
             ),
-            const SizedBox(height: 20),
-            Text(_status, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 40),
+            const SizedBox(height: 30),
+            Text(
+              isLive ? "Broadcasting Live..." : "Ready to start",
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              "Updates Sent: $_updatesSent",
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+            ),
+            const SizedBox(height: 50),
             ElevatedButton(
               onPressed: _toggleBroadcast,
               style: ElevatedButton.styleFrom(
-                backgroundColor: isBroadcasting ? Colors.redAccent : AppConfig.primaryColor,
-                padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 15),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                backgroundColor:
+                    isLive ? Colors.redAccent : AppConfig.primaryColor,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 50,
+                  vertical: 15,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
               ),
               child: Text(
-                isBroadcasting ? "STOP BROADCAST" : "START BROADCAST",
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                isLive ? "STOP BROADCAST" : "START BROADCAST",
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildRadarAnimation() {
+    return TweenAnimationBuilder(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(seconds: 2),
+      builder: (context, double value, child) {
+        return Container(
+          width: 120 + (value * 100),
+          height: 120 + (value * 100),
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.orange.withOpacity(1 - value),
+          ),
+        );
+      },
+      onEnd:
+          () => setState(
+            () {},
+          ), // Logic: Re-trigger the pulse effect [cite: 2026-02-24]
     );
   }
 }
